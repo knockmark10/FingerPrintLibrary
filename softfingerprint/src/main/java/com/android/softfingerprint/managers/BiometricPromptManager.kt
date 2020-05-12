@@ -4,7 +4,9 @@ import android.annotation.TargetApi
 import android.content.Context
 import android.hardware.biometrics.BiometricPrompt
 import android.os.Build
+import android.os.CancellationSignal
 import com.android.softfingerprint.callbacks.FingerPrintAuthenticationCallback
+import com.android.softfingerprint.entities.DialogOptions
 import com.android.softfingerprint.states.AuthenticationState
 import com.android.softfingerprint.states.AuthenticationState.AuthenticationError
 import com.android.softfingerprint.states.AuthenticationState.AuthenticationHelp
@@ -18,29 +20,30 @@ internal class BiometricPromptManager(
 
     private var mAuthListeners = mutableListOf<FingerPrintAuthenticationCallback>()
 
+    private val mCancellationSignal by lazy { CancellationSignal() }
+
+    private val mExecutor: Executor
+        get() = this.mContext.mainExecutor
+
     fun registerAuthListener(listener: FingerPrintAuthenticationCallback) {
         this.mAuthListeners.add(listener)
     }
 
     fun displayBiometricPrompt(
-        title: String = "Login",
-        subtitle: String = "Required by app",
-        description: String = "Place your fingerprint",
-        negativeMessage: String = "Cancel",
-        executor: Executor? = null,
+        dialogOptions: DialogOptions = DialogOptions(),
         negativeAction: ((dialog: Dialog) -> Unit)? = null
     ) {
-        val checkedExecutor = executor ?: this.mContext.mainExecutor
         BiometricPrompt.Builder(this.mContext)
-            .setTitle(title)
-            .setSubtitle(subtitle)
-            .setDescription(description)
-            .setNegativeButton(negativeMessage, checkedExecutor,
+            .setTitle(dialogOptions.title)
+            .setSubtitle(dialogOptions.subtitle)
+            .setDescription(dialogOptions.description)
+            .setNegativeButton(dialogOptions.cancel, this.mExecutor,
                 Dialog.OnClickListener { dialog, _ ->
                     negativeAction?.let { it(dialog) }
                     dialog.dismiss()
                 })
             .build()
+            .authenticate(this.mCancellationSignal, this.mExecutor, this)
     }
 
     private fun notifyListener(output: (callback: FingerPrintAuthenticationCallback) -> Unit) {

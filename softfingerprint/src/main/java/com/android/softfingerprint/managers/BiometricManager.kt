@@ -1,10 +1,13 @@
 package com.android.softfingerprint.managers
 
 import android.content.Context
+import android.support.v4.app.FragmentManager
 import com.android.softfingerprint.callbacks.FingerPrintAuthenticationCallback
 import com.android.softfingerprint.callbacks.FingerPrintHandlerCallback
+import com.android.softfingerprint.dialogs.BiometricCompatBottomSheet
+import com.android.softfingerprint.entities.DialogOptions
 import com.android.softfingerprint.states.BiometricState
-import com.android.softfingerprint.states.FingerPrintState.*
+import com.android.softfingerprint.states.BiometricType
 import com.android.softfingerprint.utils.BiometricUtils
 
 /**
@@ -12,88 +15,130 @@ import com.android.softfingerprint.utils.BiometricUtils
  */
 class BiometricManager(private val mContext: Context) {
 
+    private var mFragmentManager: FragmentManager? = null
+
+    private var mBiometricType: BiometricType = BiometricType.Native
+
+    private var mDialogOptions: DialogOptions = DialogOptions()
+
     private val mFingerPrintManager by lazy { FingerPrintManager(this.mContext) }
 
     private val mBiometricPromptManager by lazy { BiometricPromptManager(this.mContext) }
 
-    private val mBiometricUtils by lazy {
-        BiometricUtils(
-            this.mContext
-        )
+    private val mBiometricValidations by lazy { BiometricValidations(this.mContext) }
+
+    private val mBiometricUtils by lazy { BiometricUtils(this.mContext) }
+
+    private val mBiometricBottomSheetDialog by lazy { BiometricCompatBottomSheet() }
+
+    fun validateFingerPrint() {
+        this.mBiometricValidations.validateFingerPrint()
     }
 
-    private var mBasicListeners = mutableListOf<FingerPrintHandlerCallback>()
-
-    fun registerBasicListener(listener: FingerPrintHandlerCallback) {
-        this.mBasicListeners.add(listener)
+    fun startAuthProcess() {
+        when (this.mBiometricType) {
+            BiometricType.Native -> this.handleNativeAuthProcess()
+            BiometricType.Dialog -> this.handleDialogAuthProcess()
+            BiometricType.BottomSheet -> this.handleBottomSheetAuthProcess()
+            BiometricType.Custom -> this.operateWithManager()
+        }
     }
 
-    fun registerAuthListener(listener: FingerPrintAuthenticationCallback) {
+    fun registerBasicListener(listener: FingerPrintHandlerCallback): BiometricManager {
+        this.mBiometricValidations.registerBasicListener(listener)
+        return this
+    }
+
+    fun registerAuthListener(listener: FingerPrintAuthenticationCallback): BiometricManager {
         when (this.mBiometricUtils.getDeviceCapabilities()) {
             BiometricState.BiometricPromptSupported ->
                 this.mBiometricPromptManager.registerAuthListener(listener)
             BiometricState.FingerprintSupported ->
                 this.mFingerPrintManager.registerAuthListener(listener)
-            BiometricState.DeviceUnsupported ->
-                throw UnsupportedOperationException("This operation is unsupported by your device.")
+            BiometricState.DeviceUnsupported -> raiseUnsupportedOperationException()
         }
+        return this
     }
 
-    fun clearListeners() {
-        this.mBasicListeners.clear()
-    }
-
-    fun validateFingerPrint(): Unit = with(this.mBiometricUtils) {
-        checkBasicListener()
-        if (this.isHardWareSupported()) {
-            if (this.isPermissionGranted()) {
-                if (this.isFingerprintAvailable()) {
-                    if (this.isKeyGuardSecure()) {
-                        //Fingerprint validation succeeded
-                        notifyBasicListener { it.onFingerPrintSucceeded() }
-                    } else {
-                        //Fingerprint not secured
-                        notifyBasicListener { it.onFingerPrintFailed(LockScreenSecurityDisabled) }
-                    }
-                } else {
-                    //Fingerprint unavailable
-                    notifyBasicListener { it.onFingerPrintFailed(NoFingerPrintRegistered) }
-                }
-            } else {
-                //Permission not granted
-                notifyBasicListener { it.onRequestPermission(this.getRequiredPermission()) }
-            }
-        } else {
-            //Hardware not supported
-            notifyBasicListener { it.onFingerPrintFailed(NoFingerPrintSensor) }
-        }
-    }
-
-    fun startAuthProcess() {
+    // Handle native process for device-specific API available
+    private fun handleNativeAuthProcess() {
         when (this.mBiometricUtils.getDeviceCapabilities()) {
             BiometricState.BiometricPromptSupported -> operateWithBiometrics()
-            BiometricState.FingerprintSupported -> operateWithManager()
-            BiometricState.DeviceUnsupported ->
-                throw UnsupportedOperationException("This operation is unsupported by your device.")
+            BiometricState.FingerprintSupported -> handleDialogAuthProcess()
+            BiometricState.DeviceUnsupported -> raiseUnsupportedOperationException()
         }
+    }
+
+    private fun handleDialogAuthProcess() {
+        if (this.mBiometricUtils.getDeviceCapabilities() == BiometricState.DeviceUnsupported) {
+            raiseUnsupportedOperationException()
+        }
+        TODO("Handle dialog auth")
+    }
+
+    private fun handleBottomSheetAuthProcess() {
+        if (this.mBiometricUtils.getDeviceCapabilities() == BiometricState.DeviceUnsupported) {
+            raiseUnsupportedOperationException()
+        }
+        this.mBiometricBottomSheetDialog.setData(this.mDialogOptions)
+        this.mBiometricBottomSheetDialog
+            .show(this.mFragmentManager, BiometricManager::class.java.name)
     }
 
     private fun operateWithBiometrics() {
-        this.mBiometricPromptManager.displayBiometricPrompt()
+        this.mBiometricPromptManager.displayBiometricPrompt(this.mDialogOptions) {
+
+        }
     }
 
     private fun operateWithManager() {
         this.mFingerPrintManager.startAuthProcess()
     }
 
-    private fun checkBasicListener() {
-        if (this.mBasicListeners.isEmpty()) {
-            throw NullPointerException("FingerPrintBasicCallback interface required. You need to register it..")
-        }
+    private fun raiseUnsupportedOperationException() {
+        throw UnsupportedOperationException("This operation is unsupported by your device.")
+
     }
 
-    private fun notifyBasicListener(output: (callback: FingerPrintHandlerCallback) -> Unit) {
-        this.mBasicListeners.forEach { output(it) }
+    object Builder {
+
+        private var biometricType: BiometricType = BiometricType.Native
+
+        private var title: String = "Title"
+
+        private var subtitle: String = "Subtitle"
+
+        private var description: String = "Description"
+
+        private var cancel: String = "Cancel"
+
+        fun setBiometricType(type: BiometricType): Builder =
+            Builder.apply { this.biometricType = type }
+
+        fun setTitle(title: String): Builder =
+            Builder.apply {
+                this.title = title
+            }
+
+        fun setSubtitle(subtitle: String): Builder =
+            Builder.apply { this.subtitle = subtitle }
+
+        fun setDescription(description: String): Builder =
+            Builder.apply { this.description = description }
+
+        fun setCancel(cancel: String): Builder =
+            Builder.apply { this.cancel = cancel }
+
+        fun build(context: Context, fragmentManager: FragmentManager): BiometricManager =
+            BiometricManager(context).apply {
+                this.mFragmentManager = fragmentManager
+                this.mBiometricType = biometricType
+                this.mDialogOptions = buildDialogOptions()
+            }
+
+        private fun buildDialogOptions(): DialogOptions =
+            DialogOptions(this.title, this.subtitle, this.description, this.cancel)
+
     }
 
 }
