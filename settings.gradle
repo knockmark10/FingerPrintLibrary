@@ -1,2 +1,3 @@
-include ':app', ':softfingerprint'
+include ':app'
 rootProject.name='FingerPrintLibrary'
+include ':biometrics'
