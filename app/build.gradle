@@ -3,12 +3,12 @@ apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-android-extensions'
 
 android {
-    compileSdkVersion 28
-    buildToolsVersion "28.0.3"
+    compileSdkVersion rootProject.ext.compile_sdk_version
+    buildToolsVersion rootProject.ext.build_tools_version
     defaultConfig {
         applicationId "com.android.fingerprintlibrary"
-        minSdkVersion 21
-        targetSdkVersion 28
+        minSdkVersion rootProject.ext.min_sdk_version
+        targetSdkVersion rootProject.ext.target_version
         versionCode rootProject.ext.version_code
         versionName rootProject.ext.version_name
     }
@@ -18,8 +18,17 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+
+    lintOptions {
+        error("VisibleForTests")
+    }
 }
 
 dependencies {
-    implementation project(':softfingerprint')
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation project(':biometrics')
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    implementation 'androidx.appcompat:appcompat:1.1.0'
+    implementation 'androidx.core:core-ktx:1.2.0'
+    implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
 }

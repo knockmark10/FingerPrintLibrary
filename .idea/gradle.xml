@@ -12,7 +12,7 @@
           <set>
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/app" />
-            <option value="$PROJECT_DIR$/softfingerprint" />
+            <option value="$PROJECT_DIR$/biometrics" />
           </set>
         </option>
         <option name="resolveModulePerSourceSet" value="false" />
